@@ -10,249 +10,165 @@ import (
 	"unicode"
 )
 
-// Derive a word we have to guessing
-// Printing the game state
-// 	* Print word you are guessing
-// 	* Print hangman state
-// Read user input
-// 	* validate it (e.g. only letters)
-// Determine if the letter is a correct guess or not
-// 	* if correct, update the guessed letter
-// 	* if incorrect, update the hangman state
-// if word is guessed, game over -> you win
-// If hangman is complete -> game over, you lose
-
-var readerInput = bufio.NewReader(os.Stdin)
-
-var dictionary = []string{"Zombie", "Gopher", "United States of America", "Indonesia", "Nazism", "Apple", "Programming"}
+var dictionary = []string{"zombie", "gopher", "golang", "apple", "programming"}
+var maxAttempts = 9 // Maximum incorrect guesses allowed
+var reader = bufio.NewReader(os.Stdin)
 
 func main() {
 	targetWord := getRandomWord()
-	guessedLetters := initializeGuessedWords(targetWord)
+	guessedLetters := make(map[rune]bool)
+	attempts := 0
 
-	hangmanState := 0
-	for !isGameOver(targetWord, guessedLetters, hangmanState) {
-		printGameState(targetWord, guessedLetters, hangmanState)
-		fmt.Print(">")
-		input := readInput()
+	// Reveal first and last letters to help the player
+	guessedLetters[rune(targetWord[0])] = true
+	guessedLetters[rune(targetWord[len(targetWord)-1])] = true
 
-		if len(input) != 1 {
-			fmt.Println("Invalid input")
+	for !gameOver(targetWord, guessedLetters, attempts) {
+		printGameState(targetWord, guessedLetters, attempts)
+		fmt.Print("Enter a letter: ")
+		letter := readLetter()
+
+		if guessedLetters[letter] {
+			fmt.Println("You've already guessed this letter.")
 			continue
 		}
-		letter := rune(input[0])
-		if isCorrectGuess(targetWord, letter) {
+
+		if strings.ContainsRune(targetWord, letter) {
 			guessedLetters[letter] = true
 		} else {
-			hangmanState += 1
+			attempts++
+			fmt.Println("Incorrect guess!")
 		}
 	}
-	fmt.Print("Game Over........")
+
+	// Final game result
+	printGameState(targetWord, guessedLetters, attempts)
+	fmt.Println("Game Over!")
 	if isWordGuessed(targetWord, guessedLetters) {
-		fmt.Println("You Win!")
+		fmt.Println("🎉 You Win! 🎉")
 	} else {
-		fmt.Println("You Lose!")
+		fmt.Println("😞 You Lose! The word was:", targetWord)
 	}
-
 }
 
-func initializeGuessedWords(targetWord string) map[rune]bool {
-	guessedLetters := map[rune]bool{}
-	guessedLetters[unicode.ToLower(rune(targetWord[0]))] = true
-	guessedLetters[unicode.ToLower(rune(targetWord[len(targetWord)-1]))] = true
-	return guessedLetters
+// Select a random word from the dictionary
+func getRandomWord() string {
+	src := rand.NewSource(time.Now().UnixNano())
+	r := rand.New(src)
+	targerWord := dictionary[r.Intn(len(dictionary))]
+	return targerWord
 }
 
+// Check if the game is over
+func gameOver(targetWord string, guessedLetters map[rune]bool, attempts int) bool {
+	return isWordGuessed(targetWord, guessedLetters) || attempts >= maxAttempts
+}
+
+// Check if the player has guessed all letters correctly
 func isWordGuessed(targetWord string, guessedLetters map[rune]bool) bool {
-	for _, ch := range targetWord {
-		if !guessedLetters[unicode.ToLower(ch)] {
+	for _, letter := range targetWord {
+		if letter != ' ' && !guessedLetters[letter] {
 			return false
 		}
 	}
 	return true
 }
 
-func isGameOver(targetWord string,
-	guessedLetters map[rune]bool,
-	hangmanState int,
-) bool {
-	return isWordGuessed(targetWord, guessedLetters) || isHangmanComplete(hangmanState)
-}
-func isHangmanComplete(hangmanState int) bool {
-	return hangmanState >= 9
+// Print the current game state
+func printGameState(targetWord string, guessedLetters map[rune]bool, attempts int) {
+	fmt.Println("\nWord: " + getWordProgress(targetWord, guessedLetters))
+	fmt.Println(drawHangman(attempts))
+	fmt.Printf("Attempts left: %d\n", maxAttempts-attempts)
 }
 
-func getRandomWord() string {
-	src := rand.NewSource(time.Now().UnixNano())
-	r := rand.New(src)
-	targerWord := dictionary[r.Intn(len(dictionary))]
-	return targerWord
-
-}
-
-func printGameState(
-	targetWord string,
-	guessedLetters map[rune]bool,
-	hangmanState int,
-) {
-	fmt.Println(getWordGuessingProgress(targetWord, guessedLetters))
-	fmt.Println()
-	fmt.Println(printHangmanState(hangmanState))
-}
-
-func readInput() string {
-	input, err := readerInput.ReadString('\n')
-	if err != nil {
-		panic(err)
-	}
-	return strings.TrimSpace(input)
-}
-
-func getWordGuessingProgress(targetWord string, guessedLetter map[rune]bool) string {
-	result := ""
-	for _, ch := range targetWord {
-		if ch == ' ' {
-			result += " "
-		} else if guessedLetter[unicode.ToLower(ch)] {
-			result += fmt.Sprintf("%c", ch)
+// Get the current word progress with guessed letters
+func getWordProgress(targetWord string, guessedLetters map[rune]bool) string {
+	var progress strings.Builder
+	for _, letter := range targetWord {
+		if letter == ' ' {
+			progress.WriteString("  ") // Space remains visible
+		} else if guessedLetters[letter] {
+			progress.WriteRune(letter) // Show guessed letters
 		} else {
-			result += "_"
+			progress.WriteString("_ ") // Hide unguessed letters
 		}
-		result += " "
 	}
-	return result
+	return progress.String()
 }
 
-func printHangmanState(hangmanState int) string {
-	if hangmanState == 0 {
-		return state0()
-	} else if hangmanState == 1 {
-		return state1()
-	} else if hangmanState == 2 {
-		return state2()
-	} else if hangmanState == 3 {
-		return state3()
-	} else if hangmanState == 4 {
-		return state4()
-	} else if hangmanState == 5 {
-		return state5()
-	} else if hangmanState == 6 {
-		return state6()
-	} else if hangmanState == 7 {
-		return state7()
-	} else if hangmanState == 8 {
-		return state8()
-	} else {
-		return state9()
+// Read and validate user input
+func readLetter() rune {
+	input, _ := reader.ReadString('\n')
+	input = strings.TrimSpace(input)
+	if len(input) != 1 {
+		fmt.Println("Invalid input! Enter a single letter.")
+		return readLetter()
 	}
-
+	return unicode.ToLower(rune(input[0]))
 }
 
-func isCorrectGuess(targetWord string, letter rune) bool {
-	return strings.ContainsRune(targetWord, letter)
-}
-
-func state0() string {
-	state := ""
-	return state
-}
-func state1() string {
-	state := `
--
-|
-|
-|
-|
-	`
-	return state
-}
-
-func state2() string {
-	state := `
------------
-|
-|
-|
-|
-	`
-	return state
-}
-
-func state3() string {
-	state := `
------------
-|       |
-|
-|
-|
-	`
-	return state
-}
-
-func state4() string {
-	state := `
------------
-|       |
-|       0
-|     
-|
-	`
-	return state
-}
-
-func state5() string {
-	state := `
------------
-|       |
-|       0
-|     /
-|
-	`
-	return state
-}
-
-func state6() string {
-	state := `
------------
-|       |
-|       0
-|     / |
-|
-	`
-	return state
-}
-
-func state7() string {
-	state := `
------------
-|       |
-|       0
-|     / | \
-|
-	`
-	return state
-}
-
-func state8() string {
-	state := `
------------
-|       |
-|       0
-|     / | \
-|      / 
-|      
-	`
-	return state
-}
-
-func state9() string {
-	state := `
------------
-|       |
-|       0
-|     / | \
-|      / \
-|      
-	`
-	return state
+// Draw hangman stages
+func drawHangman(attempts int) string {
+	states := []string{
+		`
+		   
+		   
+		   
+		   
+		`,
+		`
+		---
+		|
+		|
+		|
+		`,
+		`
+		---
+		|   |
+		|
+		|
+		`,
+		`
+		---
+		|   |
+		|   O
+		|
+		`,
+		`
+		---
+		|   |
+		|   O
+		|   |
+		`,
+		`
+		---
+		|   |
+		|   O
+		|  /|
+		`,
+		`
+		---
+		|   |
+		|   O
+		|  /|\
+		`,
+		`
+		---
+		|   |
+		|   O
+		|  /|\
+		|  /
+		`,
+		`
+		---
+		|   |
+		|   O
+		|  /|\
+		|  / \
+		`,
+	}
+	if attempts >= len(states) {
+		return states[len(states)-1] // Last hangman stage
+	}
+	return states[attempts]
 }
